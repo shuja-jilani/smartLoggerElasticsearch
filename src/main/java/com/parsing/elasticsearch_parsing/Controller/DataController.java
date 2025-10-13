@@ -51,23 +51,7 @@ public class DataController {
         }
     }
 
-    @GetMapping({"/fetch-and-publish-db"})
-    public Map<String, Object> fetchAndPublishForDB(@RequestParam String gte, @RequestParam String lte) {
-        List<Connection> connections = this.connectionRepository.findByConnectionType("database");
-        if (connections.isEmpty()) {
-            return Collections.singletonMap("message", "No Elasticsearch connections found.");
-        } else {
-            for(Connection connection : connections) {
-                ObjectNode message = (new ObjectMapper()).createObjectNode();
-                message.putPOJO("connection", connection);
-                message.put("gte", gte);
-                message.put("lte", lte);
-                this.kafkaProducerService.sendConnectionData(message);
-            }
 
-            return Collections.singletonMap("message", "Connections published to Kafka.");
-        }
-    }
 
     @GetMapping({"/processed-count"})
     public Map<String, Object> getProcessedCount() {

@@ -47,7 +47,7 @@ public class ElasticsearchService {
 
     public boolean indexToElasticsearch(Map<String, Object> data) {
         try {
-            String esUrl = "http://elasticsearch:9200/my_buzzhub_index4/_doc";
+            String esUrl = "http://elasticsearch:9200/my_smartlogger_index2/_doc";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<String> request = new HttpEntity(this.objectMapper.writeValueAsString(data), headers);

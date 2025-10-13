@@ -44,10 +44,6 @@ public class KafkaConsumerService {
                 JsonNode rawData = messageNode.get("source");
                 System.out.println("Received from Kafka: " + rawData);
                 transformedData = this.transformDataService.transformData(rawData, connection);
-            } else if ("database".equalsIgnoreCase(connectionType)) {
-                JsonNode rawData = messageNode.get("source");
-                System.out.println("Received from Kafka (DB): " + rawData);
-                transformedData = this.transformDataService.transformDBData(rawData, connection);
             }
 
             boolean isIndexed = false;
@@ -84,7 +80,6 @@ public class KafkaConsumerService {
             String lte = messageNode.get("lte").asText();
             String connectionType = connection.getConnectiontype();
             System.out.println("DEBUG: Connection Type = " + connectionType);
-            if ("elasticsearch".equalsIgnoreCase(connectionType)) {
                 JsonNode rawData = this.elasticsearchService.fetchData(connection, gte, lte);
                 JsonNode hitsArray = rawData.path("hits").path("hits");
                 if (hitsArray != null && hitsArray.isArray()) {
@@ -99,40 +94,7 @@ public class KafkaConsumerService {
                 } else {
                     System.out.println("DEBUG: No hits found in Elasticsearch response.");
                 }
-            } else if ("database".equalsIgnoreCase(connectionType)) {
-                try {
-                    List<Map<String, Object>> records = this.databaseService.fetchTableData(connection, gte, lte);
 
-                    for(Map<String, Object> row : records) {
-                        ObjectNode enrichedMessage = objectMapper.createObjectNode();
-                        Map<String, Object> normalizedRow = new HashMap();
-
-                        for(Map.Entry<String, Object> entry : row.entrySet()) {
-                            Object value = entry.getValue();
-                            if (value instanceof Timestamp) {
-                                String formatted = value.toString();
-                                normalizedRow.put((String)entry.getKey(), formatted);
-                            } else {
-                                normalizedRow.put((String)entry.getKey(), value);
-                            }
-                        }
-
-                        enrichedMessage.putPOJO("connection", connection);
-                        enrichedMessage.set("source", objectMapper.valueToTree(normalizedRow));
-                        System.out.println("DEBUG: Sending DB record to Kafka -> " + enrichedMessage);
-                        this.kafkaProducerService.sendRawData(enrichedMessage);
-                    }
-
-                    if (records.isEmpty()) {
-                        System.out.println("DEBUG: No records found in DB table for given time range.");
-                    }
-                } catch (Exception e) {
-                    System.err.println("ERROR: Failed to fetch or send DB records: " + e.getMessage());
-                    e.printStackTrace();
-                }
-            } else {
-                System.out.println("WARN: Unsupported connection type: " + connectionType);
-            }
         } catch (Exception e) {
             System.err.println("Error processing connection message: " + e.getMessage());
             e.printStackTrace();

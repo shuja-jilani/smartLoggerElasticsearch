@@ -42,33 +42,4 @@ public class DatabaseService {
         this.jdbcTemplate.update(sql, new Object[]{apiMetadataId, fieldName, identifier, datatype, contentType, keyStatus, path});
     }
 
-    public List<Map<String, Object>> fetchTableData(Connection connection, String gte, String lte) throws Exception {
-        JsonNode details = this.objectMapper.readTree(connection.getDetails());
-        String host = details.get("host").asText();
-        int port = details.get("port").asInt();
-        String dbName = details.get("databaseName").asText();
-        String user = details.get("userName").asText();
-        String password = details.get("password").asText();
-        String tableName = details.get("tableName").asText();
-        String requestTimeColumn = "RequestTime";
-
-        for(JsonNode field : details.get("fields")) {
-            if ("RequestTime".equals(field.get("field").asText())) {
-                requestTimeColumn = field.get("identifier").asText();
-                break;
-            }
-        }
-
-        String url = String.format("jdbc:postgresql://%s:%d/%s", host, port, dbName);
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl(url);
-        dataSource.setUsername(user);
-        dataSource.setPassword(password);
-        dataSource.setDriverClassName("org.postgresql.Driver");
-        JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
-        String sql = String.format("SELECT * FROM \"%s\" WHERE \"%s\" >= ? AND \"%s\" <= ?", tableName, requestTimeColumn, requestTimeColumn);
-        Timestamp gteTimestamp = Timestamp.valueOf(gte.replace("T", " "));
-        Timestamp lteTimestamp = Timestamp.valueOf(lte.replace("T", " "));
-        return jdbcTemplate.queryForList(sql, new Object[]{gteTimestamp, lteTimestamp});
-    }
 }

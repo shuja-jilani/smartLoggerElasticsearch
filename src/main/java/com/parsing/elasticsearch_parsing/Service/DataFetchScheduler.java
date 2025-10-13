@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -19,12 +21,13 @@ public class DataFetchScheduler {
         this.objectMapper = objectMapper;
     }
 
+//    @Scheduled(fixedRate = 120000) // Runs every 2 minutes
     public void publishConnectionsAutomatically() {
         Instant now = Instant.now();
         Instant twoMinutesAgo = now.minusSeconds(120L);
         String gte = FORMATTER.format(twoMinutesAgo);
         String lte = FORMATTER.format(now);
-        String esUrl = "http://esParserSpringboot:8083/fetch-and-publish?gte=" + gte + "&lte=" + lte;
+        String esUrl = "http://localhost:8083/fetch-and-publish?gte=" + gte + "&lte=" + lte;
 
         try {
             String esResponse = (String)this.restTemplate.getForObject(esUrl, String.class, new Object[0]);
