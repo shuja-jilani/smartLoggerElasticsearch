@@ -12,5 +12,6 @@ public interface ApiMetadataRepository extends JpaRepository<ApiMetadata, UUID> 
     List<ApiMetadata> findByConnectionNameAndStatus(String connectionName, String status);
 
     ApiMetadata findByResourcePath(String resourcePath);
+    ApiMetadata findByConnectionNameAndResourcePath(String connectionName, String resourcePath);
 }
 

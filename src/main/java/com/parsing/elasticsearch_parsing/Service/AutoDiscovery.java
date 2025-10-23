@@ -26,12 +26,7 @@ public class AutoDiscovery {
             String connectionType = connection.getConnectiontype();
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode details = objectMapper.readTree(connection.getDetails());
-            String dataset;
-            if ("database".equalsIgnoreCase(connectionType)) {
-                dataset = details.get("tableName").asText();
-            } else {
-                dataset = details.get("dataset").asText();
-            }
+            String dataset = details.get("dataset").asText();
 
             UUID uniqueId = UUID.randomUUID();
             String roleNames = "Admin";

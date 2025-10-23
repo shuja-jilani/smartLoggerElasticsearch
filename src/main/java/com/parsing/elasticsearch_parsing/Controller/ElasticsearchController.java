@@ -27,17 +27,17 @@ public class ElasticsearchController {
         this.elasticsearchService = elasticsearchService;
         this.connectionRepository = connectionRepository;
     }
-
-    @GetMapping({"/fetch"})
-    public ResponseEntity<Map<String, JsonNode>> fetchData(@RequestParam String gte, @RequestParam String lte) throws IOException {
-        List<Connection> connections = this.connectionRepository.findByConnectionType("elasticsearch");
-        Map<String, JsonNode> responseMap = new HashMap();
-
-        for(Connection connection : connections) {
-            JsonNode rawData = this.elasticsearchService.fetchData(connection, gte, lte);
-            responseMap.put(connection.getConnectionName(), rawData);
-        }
-
-        return ResponseEntity.ok(responseMap);
-    }
+//
+//    @GetMapping({"/fetch"})
+//    public ResponseEntity<Map<String, JsonNode>> fetchData(@RequestParam String gte, @RequestParam String lte) throws IOException {
+//        List<Connection> connections = this.connectionRepository.findByConnectionType("elasticsearch");
+//        Map<String, JsonNode> responseMap = new HashMap();
+//
+//        for(Connection connection : connections) {
+//            JsonNode rawData = this.elasticsearchService.fetchData(connection, gte, lte);
+//            responseMap.put(connection.getConnectionName(), rawData);
+//        }
+//
+//        return ResponseEntity.ok(responseMap);
+//    }
 }

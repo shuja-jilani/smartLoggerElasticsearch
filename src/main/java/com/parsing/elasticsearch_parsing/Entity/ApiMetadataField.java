@@ -29,9 +29,44 @@ public class ApiMetadataField {
     private String datatype;
     private String contentType;
     private String key_status;
+    private String source_content;
+    private String extraction_path;
+    private String date_type;
+    private String date_pattern;
     @Transient
     private boolean wmAPIGateway;
 
+    public String getDate_type() {
+        return date_type;
+    }
+
+    public void setDate_type(String date_type) {
+        this.date_type = date_type;
+    }
+
+    public String getExtraction_path() {
+        return extraction_path;
+    }
+
+    public void setExtraction_path(String extraction_path) {
+        this.extraction_path = extraction_path;
+    }
+
+    public String getSource_content() {
+        return source_content;
+    }
+
+    public void setSource_content(String source_content) {
+        this.source_content = source_content;
+    }
+
+    public String getDate_pattern() {
+        return date_pattern;
+    }
+
+    public void setDate_pattern(String date_pattern) {
+        this.date_pattern = date_pattern;
+    }
     public String getKey_status() {
         return this.key_status;
     }

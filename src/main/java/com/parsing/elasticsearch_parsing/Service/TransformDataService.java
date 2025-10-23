@@ -6,18 +6,21 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.text.*;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.parsing.elasticsearch_parsing.Entity.*;
 import com.parsing.elasticsearch_parsing.Repository.ApiMetadataFieldRepository;
 import com.parsing.elasticsearch_parsing.Repository.ApiMetadataRepository;
+import com.parsing.elasticsearch_parsing.Service.utils.FieldExtractorUtil;
 import lombok.Data;
 import org.springframework.stereotype.Service;
 
 @Service
-@Data
 public class TransformDataService {
     private final DatabaseService databaseService;
     private final ApiMetadataRepository apiMetadataRepository;
@@ -25,33 +28,33 @@ public class TransformDataService {
     private final ApiMetadataFieldRepository apiMetadataFieldRepository;
     private final AutoDiscovery autoDiscovery;
 
+    public TransformDataService(DatabaseService databaseService, ApiMetadataRepository apiMetadataRepository, ObjectMapper objectMapper, ApiMetadataFieldRepository apiMetadataFieldRepository, AutoDiscovery autoDiscovery) {
+        this.databaseService = databaseService;
+        this.apiMetadataRepository = apiMetadataRepository;
+        this.objectMapper = objectMapper;
+        this.apiMetadataFieldRepository = apiMetadataFieldRepository;
+        this.autoDiscovery = autoDiscovery;
+    }
+
+
     public Map<String, Object> transformData(JsonNode source, Connection connection) throws JsonProcessingException {
         Map<String, Object> transformedData = new HashMap();
-        String contentType = "date";
-        String requestPattern = "yyyy-MM-dd'T'HH:mm:ss.SSS";
         JsonNode details = this.objectMapper.readTree(connection.getDetails());
         String pathToResourcePath = "ResourcePath";
 
-        for(JsonNode field : details.get("fields")) {
-            if ("ResourcePath".equals(field.get("field").asText())) {
+        for (JsonNode field : details.get("fields")) {
+            String fieldName = field.get("field").asText();
+
+            if ("ResourcePath".equals(fieldName)) {
                 pathToResourcePath = field.get("path").asText();
             }
-
-            if ("RequestTime".equals(field.get("field").asText())) {
-                contentType = field.get("contentType").asText();
-            }
         }
-
-        if ("date".equalsIgnoreCase(contentType) && details.has("patterns") && details.get("patterns").has("RequestTime")) {
-            requestPattern = details.get("patterns").get("RequestTime").asText();
-        }
-
         Optional<JsonNode> resourcePathNode = this.getValueFromPath(source, pathToResourcePath);
         if (!resourcePathNode.isPresent()) {
             return null;
         } else {
             String resourcePath = ((JsonNode)resourcePathNode.get()).asText();
-            ApiMetadata matchingApi = this.apiMetadataRepository.findByResourcePath(resourcePath);
+            ApiMetadata matchingApi = this.apiMetadataRepository.findByConnectionNameAndResourcePath(connection.getConnectionName(), resourcePath);
             if (matchingApi == null) {
                 this.autoDiscovery.performAutoDiscovery(connection, resourcePath);
                 return null;
@@ -62,70 +65,36 @@ public class TransformDataService {
                 List<Map<String, String>> customFields = new ArrayList<>();
 
                 for (ApiMetadataField field : fields) {
-                    String path = field.getPath();          // use path for locating data in JSON
-                    String fieldName = field.getField();    // output field name
+                    String fieldName = field.getField();
                     String keyStatus = field.getKey_status();
-                    String fieldContentType = field.getContentType();
 
-                    Optional<JsonNode> valueNode = Optional.empty();
+                    String extractedValue = FieldExtractorUtil.extractValue(source, field);
 
-                    // --- Handle RequestPayload separately ---
-                    if ("RequestPayload".equalsIgnoreCase(fieldName)) {
-                        valueNode = getValueFromPath(source, path);
-                        if (valueNode.isPresent()) {
-                            // payload is a stringified JSON → take as text
-                            transformedData.put(fieldName, valueNode.get().asText());
-                        }
-                    }
-                    // --- Handle ResponsePayload separately ---
-                    else if ("ResponsePayload".equalsIgnoreCase(fieldName)) {
-                        valueNode = getValueFromPath(source, path);
-                        if (valueNode.isPresent()) {
-                            transformedData.put(fieldName, valueNode.get().asText());
-                        }
-                    }
-                    // --- Handle all other fields normally ---
-                    else {
-                        valueNode = getValueFromPath(source, path);
-                        if (valueNode.isPresent()) {
-                            String value = valueNode.get().asText();
-
-                            if ("Custom".equalsIgnoreCase(keyStatus)) {
-                                Map<String, String> customFieldEntry = new HashMap<>();
-                                customFieldEntry.put("key", fieldName);
-                                customFieldEntry.put("value", value);
-                                customFields.add(customFieldEntry);
-                            } else {
-                                transformedData.put(fieldName, value);
-                            }
+                    if (extractedValue != null) {
+                        if ("Custom".equalsIgnoreCase(keyStatus)) {
+                            Map<String, String> customFieldEntry = new HashMap<>();
+                            customFieldEntry.put("key", fieldName);
+                            customFieldEntry.put("value", extractedValue);
+                            customFields.add(customFieldEntry);
+                        } else {
+                            transformedData.put(fieldName, extractedValue);
                         }
                     }
                 }
 
                 if (!customFields.isEmpty()) {
-                    transformedData.put("customFields", objectMapper.valueToTree(customFields));
+                    transformedData.put("CustomField", objectMapper.valueToTree(customFields));
                 }
-
 
                 if (transformedData.containsKey("RequestTime") && transformedData.containsKey("ResponseTime")) {
                     try {
-                        if ("date".equalsIgnoreCase(contentType)) {
-                            DateTimeFormatter formatter = DateTimeFormatter.ofPattern(requestPattern);
-                            LocalDateTime requestDateTime = LocalDateTime.parse(transformedData.get("RequestTime").toString(), formatter);
-                            LocalDateTime responseDateTime = LocalDateTime.parse(transformedData.get("ResponseTime").toString(), formatter);
-                            long elapsed = Duration.between(requestDateTime, responseDateTime).toMillis();
-                            transformedData.put("ElapsedTime", elapsed);
-                        } else if ("epoch".equalsIgnoreCase(contentType)) {
-                            long requestEpoch = Long.parseLong(transformedData.get("RequestTime").toString());
-                            long responseEpoch = Long.parseLong(transformedData.get("ResponseTime").toString());
-                            long elapsed = responseEpoch - requestEpoch;
-                            transformedData.put("ElapsedTime", elapsed);
-                            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
-                            transformedData.put("RequestTime", dateFormat.format(new Date(requestEpoch)));
-                            transformedData.put("ResponseTime", dateFormat.format(new Date(responseEpoch)));
-                        }
+                        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+                        LocalDateTime requestDateTime = LocalDateTime.parse(transformedData.get("RequestTime").toString(), formatter);
+                        LocalDateTime responseDateTime = LocalDateTime.parse(transformedData.get("ResponseTime").toString(), formatter);
+                        long elapsed = Duration.between(requestDateTime, responseDateTime).toMillis();
+                        transformedData.put("ElapsedTime", elapsed);
                     } catch (Exception e) {
-                        transformedData.put("ElapsedTime", "Invalid Time Format: " + e.getMessage());
+                        transformedData.put("ElapsedTime", 0L);
                     }
                 }
 

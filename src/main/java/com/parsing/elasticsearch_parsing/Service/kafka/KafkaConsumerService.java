@@ -18,14 +18,12 @@ public class KafkaConsumerService {
     private final TransformDataService transformDataService;
     private final ElasticsearchService elasticsearchService;
     private final KafkaProducerService kafkaProducerService;
-    private final AtomicInteger processedCount = new AtomicInteger(0);
-    private final DatabaseService databaseService;
 
-    public KafkaConsumerService(TransformDataService transformDataService, ElasticsearchService elasticsearchService, KafkaProducerService kafkaProducerService, DatabaseService databaseService) {
+
+    public KafkaConsumerService(TransformDataService transformDataService, ElasticsearchService elasticsearchService, KafkaProducerService kafkaProducerService) {
         this.transformDataService = transformDataService;
         this.elasticsearchService = elasticsearchService;
         this.kafkaProducerService = kafkaProducerService;
-        this.databaseService = databaseService;
     }
 
     @KafkaListener(
@@ -40,11 +38,9 @@ public class KafkaConsumerService {
             String connectionType = connection.getConnectiontype();
             System.out.println("DEBUG: Connection Type = " + connectionType);
             Map<String, Object> transformedData = null;
-            if ("elasticsearch".equalsIgnoreCase(connectionType)) {
                 JsonNode rawData = messageNode.get("source");
                 System.out.println("Received from Kafka: " + rawData);
                 transformedData = this.transformDataService.transformData(rawData, connection);
-            }
 
             boolean isIndexed = false;
             if (transformedData != null) {
@@ -52,10 +48,9 @@ public class KafkaConsumerService {
             }
 
             if (isIndexed) {
-                this.processedCount.incrementAndGet();
-                System.out.println("Data was indexed successfully, count increment.");
+                System.out.println("Data was indexed SUCCESSFULLY");
             } else {
-                System.out.println("Data was not indexed successfully. Skipping count increment.");
+                System.out.println("Data was NOT indexed successfully");
             }
         } catch (Exception e) {
             System.err.println("Error parsing JSON: " + e.getMessage());
@@ -63,42 +58,40 @@ public class KafkaConsumerService {
 
     }
 
-    public int getProcessedCount() {
-        return this.processedCount.get();
-    }
-
-    @KafkaListener(
-            topics = {"connection-topic_es"},
-            groupId = "connection-group"
-    )
+    @KafkaListener(topics = {"connection-topic_es"}, groupId = "connection-group")
     public void consumeConnectionData(String message) {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode messageNode = objectMapper.readTree(message);
-            Connection connection = (Connection)objectMapper.treeToValue(messageNode.get("connection"), Connection.class);
-            String gte = messageNode.get("gte").asText();
-            String lte = messageNode.get("lte").asText();
+            Connection connection = objectMapper.treeToValue(messageNode.get("connection"), Connection.class);
+
             String connectionType = connection.getConnectiontype();
-            System.out.println("DEBUG: Connection Type = " + connectionType);
-                JsonNode rawData = this.elasticsearchService.fetchData(connection, gte, lte);
-                JsonNode hitsArray = rawData.path("hits").path("hits");
-                if (hitsArray != null && hitsArray.isArray()) {
-                    for(JsonNode hit : hitsArray) {
-                        JsonNode source = hit.get("_source");
-                        ObjectNode enrichedMessage = objectMapper.createObjectNode();
-                        enrichedMessage.putPOJO("connection", connection);
-                        enrichedMessage.set("source", source);
-                        System.out.println("DEBUG: Sending to Kafka -> " + enrichedMessage);
-                        this.kafkaProducerService.sendRawData(enrichedMessage);
-                    }
-                } else {
-                    System.out.println("DEBUG: No hits found in Elasticsearch response.");
+
+            JsonNode rawData = elasticsearchService.fetchData(connection);
+
+            if (rawData == null || rawData.isMissingNode()) {
+                System.out.println("DEBUG: No raw data returned from Elasticsearch for the given timeframe.");
+                return;
+            }
+
+            JsonNode hitsArray = rawData.path("hits").path("hits");
+            if (!hitsArray.isEmpty() && hitsArray.isArray()) {
+                for (JsonNode hit : hitsArray) {
+                    JsonNode source = hit.get("_source");
+                    ObjectNode enrichedMessage = objectMapper.createObjectNode();
+                    enrichedMessage.putPOJO("connection", connection);
+                    enrichedMessage.set("source", source);
+                    System.out.println("DEBUG: Sending to Kafka -> " + enrichedMessage);
+                    kafkaProducerService.sendRawData(enrichedMessage);
                 }
+            } else {
+                System.out.println("DEBUG: No hits found in Elasticsearch response for the given timeframe.");
+            }
 
         } catch (Exception e) {
             System.err.println("Error processing connection message: " + e.getMessage());
             e.printStackTrace();
         }
-
     }
+
 }
